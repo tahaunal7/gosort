@@ -13,3 +13,4 @@ go run . -i numbers.txt
  Directory mode
 go run . -d incoming
 
+

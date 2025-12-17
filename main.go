@@ -21,219 +21,210 @@ import (
 	"time"
 )
 
-/* -------------------- CHUNKING -------------------- */
+/* ---------- CHUNK CALCULATION ---------- */
 
-func chunkCount(n int) int {
-	c := int(math.Ceil(math.Sqrt(float64(n))))
-	if c < 4 {
+func computeChunkTotal(count int) int {
+	k := int(math.Ceil(math.Sqrt(float64(count))))
+	if k < 4 {
 		return 4
 	}
-	return c
+	return k
 }
 
-func splitIntoChunks(nums []int) [][]int {
-	n := len(nums)
-	c := chunkCount(n)
+func distributeIntoParts(data []int) [][]int {
+	total := len(data)
+	partCount := computeChunkTotal(total)
 
-	chunks := make([][]int, c)
-	base := n / c
-	rest := n % c
+	parts := make([][]int, partCount)
+	minSize := total / partCount
+	remainder := total % partCount
 
-	index := 0
-	for i := 0; i < c; i++ {
-		size := base
-		if i < rest {
-			size++
+	cursor := 0
+	for i := 0; i < partCount; i++ {
+		currentSize := minSize
+		if i < remainder {
+			currentSize++
 		}
-		chunks[i] = nums[index : index+size]
-		index += size
+		parts[i] = data[cursor : cursor+currentSize]
+		cursor += currentSize
 	}
-	return chunks
+	return parts
 }
 
-/* -------------------- CONCURRENT SORT -------------------- */
+/* ---------- CONCURRENT SORT ---------- */
 
-func sortChunks(chunks [][]int) {
+func parallelSort(parts [][]int) {
 	var wg sync.WaitGroup
-	wg.Add(len(chunks))
+	wg.Add(len(parts))
 
-	for i := range chunks {
+	for idx := range parts {
 		go func(i int) {
 			defer wg.Done()
-			sort.Ints(chunks[i])
-		}(i)
+			sort.Ints(parts[i])
+		}(idx)
 	}
+
 	wg.Wait()
 }
 
-/* -------------------- MERGE (K-WAY) -------------------- */
+/* ---------- MERGING ---------- */
 
-func mergeChunks(chunks [][]int) []int {
-	indexes := make([]int, len(chunks))
-	total := 0
-	for _, c := range chunks {
-		total += len(c)
+func mergeSortedParts(parts [][]int) []int {
+	pos := make([]int, len(parts))
+	finalSize := 0
+
+	for _, p := range parts {
+		finalSize += len(p)
 	}
 
-	result := make([]int, 0, total)
+	merged := make([]int, 0, finalSize)
 
-	for len(result) < total {
-		minVal := math.MaxInt
-		minChunk := -1
+	for len(merged) < finalSize {
+		smallest := math.MaxInt
+		source := -1
 
-		for i, c := range chunks {
-			if indexes[i] < len(c) {
-				if c[indexes[i]] < minVal {
-					minVal = c[indexes[i]]
-					minChunk = i
+		for i := range parts {
+			if pos[i] < len(parts[i]) {
+				if parts[i][pos[i]] < smallest {
+					smallest = parts[i][pos[i]]
+					source = i
 				}
 			}
 		}
 
-		result = append(result, minVal)
-		indexes[minChunk]++
+		merged = append(merged, smallest)
+		pos[source]++
 	}
 
-	return result
+	return merged
 }
 
-/* -------------------- MODE -r -------------------- */
+/* ---------- RANDOM MODE ---------- */
 
-func modeRandom(n int) error {
+func runRandomMode(n int) error {
 	if n < 10 {
-		return errors.New("N must be >= 10")
+		return errors.New("number of elements must be >= 10")
 	}
 
 	rand.Seed(time.Now().UnixNano())
-	nums := make([]int, n)
-	for i := range nums {
-		nums[i] = rand.Intn(1000) // range: 0–999
+	values := make([]int, n)
+
+	for i := 0; i < n; i++ {
+		values[i] = rand.Intn(1000)
 	}
 
-	fmt.Println("Original:", nums)
+	fmt.Println(values)
 
-	chunks := splitIntoChunks(nums)
-	fmt.Println("\nChunks before sorting:")
-	for _, c := range chunks {
-		fmt.Println(c)
+	segments := distributeIntoParts(values)
+
+	for _, s := range segments {
+		fmt.Println(s)
 	}
 
-	sortChunks(chunks)
+	parallelSort(segments)
 
-	fmt.Println("\nChunks after sorting:")
-	for _, c := range chunks {
-		fmt.Println(c)
+	for _, s := range segments {
+		fmt.Println(s)
 	}
 
-	merged := mergeChunks(chunks)
-	fmt.Println("\nFinal merged result:")
-	fmt.Println(merged)
+	result := mergeSortedParts(segments)
+	fmt.Println(result)
 
 	return nil
 }
 
-/* -------------------- MODE -i -------------------- */
+/* ---------- FILE MODE ---------- */
 
-func readFileInts(path string) ([]int, error) {
+func loadNumbersFromFile(path string) ([]int, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	var nums []int
+	var numbers []int
 	scanner := bufio.NewScanner(file)
 
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
 			continue
 		}
-		v, err := strconv.Atoi(line)
+
+		val, err := strconv.Atoi(text)
 		if err != nil {
-			return nil, fmt.Errorf("invalid integer: %s", line)
+			return nil, fmt.Errorf("invalid integer: %s", text)
 		}
-		nums = append(nums, v)
+		numbers = append(numbers, val)
 	}
 
-	if len(nums) < 10 {
-		return nil, errors.New("fewer than 10 valid numbers")
+	if len(numbers) < 10 {
+		return nil, errors.New("not enough numbers in file")
 	}
-	return nums, nil
+
+	return numbers, nil
 }
 
-func modeInputFile(path string) error {
-	nums, err := readFileInts(path)
+func runFileMode(path string) error {
+	numbers, err := loadNumbersFromFile(path)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Original:", nums)
+	fmt.Println(numbers)
 
-	chunks := splitIntoChunks(nums)
-	fmt.Println("\nChunks before sorting:")
-	for _, c := range chunks {
-		fmt.Println(c)
-	}
+	segments := distributeIntoParts(numbers)
+	parallelSort(segments)
 
-	sortChunks(chunks)
-
-	fmt.Println("\nChunks after sorting:")
-	for _, c := range chunks {
-		fmt.Println(c)
-	}
-
-	merged := mergeChunks(chunks)
-	fmt.Println("\nFinal merged result:")
-	fmt.Println(merged)
+	result := mergeSortedParts(segments)
+	fmt.Println(result)
 
 	return nil
 }
 
-/* -------------------- MODE -d -------------------- */
+/* ---------- DIRECTORY MODE ---------- */
 
-func modeDirectory(dir string) error {
+func runDirectoryMode(dir string) error {
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return errors.New("invalid directory")
+		return errors.New("directory not found")
 	}
 
-	outDir := fmt.Sprintf("%s_sorted_mehmet_taha_unal_231AMB077", dir)
-	err = os.MkdirAll(outDir, 0755)
-	if err != nil {
+	targetDir := fmt.Sprintf("%s_sorted_mehmet_taha_unal_231AMB077", dir)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return err
 	}
 
 	files, _ := filepath.Glob(filepath.Join(dir, "*.txt"))
 
 	for _, f := range files {
-		nums, err := readFileInts(f)
+		data, err := loadNumbersFromFile(f)
 		if err != nil {
 			return err
 		}
 
-		chunks := splitIntoChunks(nums)
-		sortChunks(chunks)
-		merged := mergeChunks(chunks)
+		segments := distributeIntoParts(data)
+		parallelSort(segments)
+		sorted := mergeSortedParts(segments)
 
-		outFile := filepath.Join(outDir, filepath.Base(f))
-		file, err := os.Create(outFile)
+		outPath := filepath.Join(targetDir, filepath.Base(f))
+		outFile, err := os.Create(outPath)
 		if err != nil {
 			return err
 		}
 
-		w := bufio.NewWriter(file)
-		for _, v := range merged {
-			fmt.Fprintln(w, v)
+		writer := bufio.NewWriter(outFile)
+		for _, v := range sorted {
+			fmt.Fprintln(writer, v)
 		}
-		w.Flush()
-		file.Close()
+		writer.Flush()
+		outFile.Close()
 	}
 
 	return nil
 }
 
-/* -------------------- MAIN -------------------- */
+/* ---------- MAIN ---------- */
 
 func main() {
 	if len(os.Args) < 3 {
@@ -245,24 +236,24 @@ func main() {
 	case "-r":
 		n, err := strconv.Atoi(os.Args[2])
 		if err != nil {
-			fmt.Println("Invalid N")
+			fmt.Println("Invalid number")
 			return
 		}
-		if err := modeRandom(n); err != nil {
+		if err := runRandomMode(n); err != nil {
 			fmt.Println("Error:", err)
 		}
 
 	case "-i":
-		if err := modeInputFile(os.Args[2]); err != nil {
+		if err := runFileMode(os.Args[2]); err != nil {
 			fmt.Println("Error:", err)
 		}
 
 	case "-d":
-		if err := modeDirectory(os.Args[2]); err != nil {
+		if err := runDirectoryMode(os.Args[2]); err != nil {
 			fmt.Println("Error:", err)
 		}
 
 	default:
-		fmt.Println("Unknown mode")
+		fmt.Println("Unknown option")
 	}
 }

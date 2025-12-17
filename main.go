@@ -43,14 +43,14 @@ func main() {
 		return
 	}
 
-	log.Fatal("Usage: gosort -r N | gosort -i file.txt")
+	log.Fatal("usage: gosort -r N | gosort -i file.txt")
 }
 
 /* -------------------- -r MODE -------------------- */
 
 func runRandom(n int) error {
 	if n < 10 {
-		return errors.New("N must be >= 10")
+		return errors.New("n must be >= 10")
 	}
 
 	rand.Seed(time.Now().UnixNano())

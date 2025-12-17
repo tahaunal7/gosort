@@ -10,7 +10,4 @@ go run . -r 50
  Input file mode
 go run . -i numbers.txt
 
- Directory mode
-go run . -d incoming
-
 
